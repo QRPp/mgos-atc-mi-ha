@@ -1,0 +1,30 @@
+author: QRPp <awesome.walrus+github@gmail.com>
+description: Mongoose OS Home Assistant binding for Xiaomi Mi 2 BLE sensors
+name: atc-mi-ha
+type: lib
+version: 1.0
+manifest_version: 2020-08-02
+
+sources:
+  - src
+
+config_schema:
+  - ["atc_mi.ha", "o", {"title": "Xiaomi Mi 2 BLE sensor Home Assistant settings"}]
+  - ["atc_mi.ha.enable", "b", false, {"title": "Enable Home Assistant MQTT comms"}]
+  - ["atc_mi.ha.min_period", "i", 60, {"title": "Seconds to suppress status updates for"}]
+  - ["atc_mi.ha.names", "o", {"title": "Sensor naming settings"}]
+  - ["atc_mi.ha.names.full_mac", "b", false, {"title": "Append full MAC, not last half to `prefix'"}]
+  - ["atc_mi.ha.names.prefix", "s", "mi_", {"title": "For sensors with no names in atc_mi.list"}]
+  - ["atc_mi.ha.names.prefix_listed", "b", false, {"title": "Prepend `prefix' even to listed names"}]
+  - ["atc_mi.ha.names.use_listed", "b", true, {"title": "Use or ignore names in atc_mi.list"}]
+  - ["atc_mi.ha.status", "o", {"title": "Optional sensor status components"}]
+  - ["atc_mi.ha.status.battery_percent", "b", true, {"title": "Include battery percentage"}]
+  - ["atc_mi.ha.status.battery_voltage", "b", false, {"title": "Include battery voltage"}]
+  - ["atc_mi.ha.status.counter", "b", false, {"title": "Include measurement counter"}]
+  - ["atc_mi.ha.status.flags", "b", false, {"title": "Include ATC/pvvx flags"}]
+  - ["atc_mi.ha.status.humidity", "b", true, {"title": "Include humidity"}]
+  - ["atc_mi.ha.status.temperature", "b", true, {"title": "Include temperature"}]
+
+libs:
+  - origin: https://github.com/mongoose-os-libs/homeassistant
+  - origin: https://github.com/QRPp/mgos-atc-mi
