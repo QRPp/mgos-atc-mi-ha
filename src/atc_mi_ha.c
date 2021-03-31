@@ -6,7 +6,7 @@
 #include <mgos_homeassistant.h>
 #include <mgos_timers.h>
 
-#include <h_log.h>
+#include <mgos-helpers/log.h>
 
 #include <atc_mi.h>
 
