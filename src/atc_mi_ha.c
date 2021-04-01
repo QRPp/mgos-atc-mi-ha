@@ -75,7 +75,7 @@ static struct mgos_homeassistant_object *ha_obj_add(
   HA_CLASS(o, name, temperature, "°C");
 #undef HA_CLASS
 
-  LOG(LL_INFO, ("%s(): added HA object %s", __FUNCTION__, name));
+  FNLOG(LL_INFO, "added HA object %s", name);
   return o;
 
 err:
