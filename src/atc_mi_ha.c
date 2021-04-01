@@ -104,8 +104,8 @@ static struct mgos_homeassistant_object *ha_obj_get_or_add(
   if (!am) {
     char *name = ha_obj_get_name(alloca(32), 32, mac, NULL);
     struct mgos_homeassistant_object *o =
-        mgos_homeassistant_object_get(ha, name) ?: ha_obj_add(ha, name);
-    return o && !strcmp(o->object_name, name) ? o : NULL;
+        mgos_homeassistant_object_get(ha, name);
+    return !o ? ha_obj_add(ha, name) : strcmp(o->object_name, name) ? NULL : o;
   }
 
   if (!am->user_data) {
