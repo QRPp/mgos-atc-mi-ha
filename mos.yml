@@ -15,7 +15,7 @@ config_schema:
   - ["atc_mi.ha.names", "o", {"title": "Sensor naming settings"}]
   - ["atc_mi.ha.names.full_mac", "b", false, {"title": "Append full MAC, not last half to `prefix'"}]
   - ["atc_mi.ha.names.prefix", "s", "mi_", {"title": "For sensors with no names in atc_mi.list"}]
-  - ["atc_mi.ha.names.prefix_listed", "b", false, {"title": "Prepend `prefix' even to listed names"}]
+  - ["atc_mi.ha.names.prefix_listed", "b", true, {"title": "Prepend `prefix' even to listed names"}]
   - ["atc_mi.ha.names.use_listed", "b", true, {"title": "Use or ignore names in atc_mi.list"}]
   - ["atc_mi.ha.status", "o", {"title": "Optional sensor status components"}]
   - ["atc_mi.ha.status.battery_percent", "b", true, {"title": "Include battery percentage"}]
