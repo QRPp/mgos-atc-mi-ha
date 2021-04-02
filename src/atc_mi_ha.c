@@ -1,5 +1,4 @@
 #include <errno.h>
-#include <stdbool.h>
 #include <string.h>
 
 #include <mgos.h>
