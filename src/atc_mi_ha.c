@@ -1,6 +1,3 @@
-#include <errno.h>
-#include <string.h>
-
 #include <mgos.h>
 #include <mgos_homeassistant.h>
 #include <mgos_timers.h>
@@ -25,17 +22,25 @@ static struct atc_mi_ha *ha_amh(struct mgos_homeassistant_object *o,
   return o->user_data;
 }
 
+static void ha_amh_status(struct mgos_homeassistant_object *o,
+                           struct json_out *out) {
+  struct atc_mi_ha *amh = ha_amh(o, out);
+  if (!amh) return;
+  bool flags = cfg->status.flags && amh->amd.flags != ATC_MI_DATA_FLAGS_INVAL;
+  if (flags) json_printf(out, "%Q:%u", "flags", amh->amd.flags);
+  if (cfg->status.counter)
+    json_printf(out, "%s%Q:%u", flags ? "," : "", "counter", amh->amd.cnt);
+}
+
 #define HA_AMH_STAT(class, fmt, inval, attr, extra)                \
   static void ha_amh_##class(struct mgos_homeassistant_object * o, \
                              struct json_out * out) {              \
     struct atc_mi_ha *amh = ha_amh(o, out);                        \
-    if (amh && (amh->amd.attr != inval))                           \
+    if (amh && amh->amd.attr != inval)                             \
       json_printf(out, fmt, amh->amd.attr extra);                  \
   }
-HA_AMH_STAT(battery_percent, "%u", ATC_MI_DATA_BATT_PCT_INVAL, batt_pct, )
-HA_AMH_STAT(battery_voltage, "%u", ATC_MI_DATA_BATT_MV_INVAL, batt_mV, )
-HA_AMH_STAT(counter, "%u", 0 || true, cnt, )
-HA_AMH_STAT(flags, "%u", ATC_MI_DATA_FLAGS_INVAL, flags, )
+HA_AMH_STAT(battery, "%u", ATC_MI_DATA_BATT_PCT_INVAL, batt_pct, )
+HA_AMH_STAT(voltage, "%u", ATC_MI_DATA_BATT_MV_INVAL, batt_mV, )
 HA_AMH_STAT(humidity, "%.2f", ATC_MI_DATA_HUMI_CPCT_INVAL, humi_cPct, / 100.0)
 HA_AMH_STAT(temperature, "%.2f", ATC_MI_DATA_TEMP_CC_INVAL, temp_cC, / 100.0)
 #undef HA_AMH_STAT
@@ -43,8 +48,7 @@ HA_AMH_STAT(temperature, "%.2f", ATC_MI_DATA_TEMP_CC_INVAL, temp_cC, / 100.0)
 static struct mgos_homeassistant_object *ha_obj_add(
     struct mgos_homeassistant *ha, char *name) {
   struct atc_mi_ha *amh = malloc(sizeof(*amh));
-  if (!amh)
-    FNERR_GT("%s(%u): (%d) %s", "malloc", sizeof(*amh), errno, strerror(errno));
+  if (!amh) FNERR_GT(MALLOC_ERR_FMT, MALLOC_ERR_ARG(amh));
   amh->amd.batt_mV = ATC_MI_DATA_BATT_MV_INVAL;
   amh->amd.batt_pct = ATC_MI_DATA_BATT_PCT_INVAL;
   amh->amd.flags = ATC_MI_DATA_FLAGS_INVAL;
@@ -54,7 +58,7 @@ static struct mgos_homeassistant_object *ha_obj_add(
   amh->stalled = true;
 
   struct mgos_homeassistant_object *o = mgos_homeassistant_object_add(
-      ha, name, COMPONENT_SENSOR, NULL, NULL, amh);
+      ha, name, COMPONENT_SENSOR, NULL, ha_amh_status, amh);
   if (!o) FNERR_GT("failed to add HA object %s", name);
 
 #define HA_CLASS(o, name, class, unit)                                  \
@@ -66,11 +70,9 @@ static struct mgos_homeassistant_object *ha_obj_add(
             ha_amh_##class))                                            \
       FNERR_GT("failed to add %s class to HA object %s", #class, name); \
   } while (0)
-  HA_CLASS(o, name, battery_percent, "%");
-  HA_CLASS(o, name, battery_voltage, "mV");
-  HA_CLASS(o, name, counter, "");
+  HA_CLASS(o, name, battery, "%");
+  HA_CLASS(o, name, voltage, "mV");
   HA_CLASS(o, name, humidity, "%");
-  HA_CLASS(o, name, flags, "");
   HA_CLASS(o, name, temperature, "°C");
 #undef HA_CLASS
 
@@ -133,17 +135,17 @@ static void am_sink(uint8_t mac[6], struct atc_mi *am, const char *fmt,
   if (!o) return;
   struct atc_mi_ha *amh = o->user_data;
 
-#define HA_SINK_STAT(inval, attr, class)                                      \
-  do {                                                                        \
-    if (cfg->status.class && (amd->attr != inval)) amh->amd.attr = amd->attr; \
+#define HA_SINK_STAT(inval, attr, class)                                    \
+  do {                                                                      \
+    if (cfg->status.class && amd->attr != inval) amh->amd.attr = amd->attr; \
   } while (0)
-  HA_SINK_STAT(ATC_MI_DATA_BATT_MV_INVAL, batt_mV, battery_voltage);
-  HA_SINK_STAT(ATC_MI_DATA_BATT_PCT_INVAL, batt_pct, battery_percent);
-  HA_SINK_STAT(0 || true, cnt, counter);
-  HA_SINK_STAT(ATC_MI_DATA_FLAGS_INVAL, flags, flags);
+  HA_SINK_STAT(ATC_MI_DATA_BATT_MV_INVAL, batt_mV, voltage);
+  HA_SINK_STAT(ATC_MI_DATA_BATT_PCT_INVAL, batt_pct, battery);
   HA_SINK_STAT(ATC_MI_DATA_HUMI_CPCT_INVAL, humi_cPct, humidity);
   HA_SINK_STAT(ATC_MI_DATA_TEMP_CC_INVAL, temp_cC, temperature);
 #undef HA_SINK_STAT
+  if (amd->flags != ATC_MI_DATA_FLAGS_INVAL) amh->amd.flags = amd->flags;
+  amh->amd.cnt = amd->cnt;
 
   amh->rts = true;
   if (amh->stalled)
