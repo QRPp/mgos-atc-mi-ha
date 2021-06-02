@@ -27,5 +27,5 @@ config_schema:
 
 libs:
   - origin: https://github.com/mongoose-os-libs/homeassistant
-  - origin: https://github.com/QRPp/mgos-atc-mi
-  - origin: https://github.com/QRPp/mgos-helpers
+  - {origin: https://github.com/QRPp/mgos-atc-mi, name: atc-mi}
+  - {origin: https://github.com/QRPp/mgos-helpers, name: helpers}
