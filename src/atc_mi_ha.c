@@ -3,6 +3,7 @@
 #include <mgos_timers.h>
 
 #include <mgos-helpers/log.h>
+#include <mgos-helpers/mem.h>
 
 #include <atc_mi.h>
 
