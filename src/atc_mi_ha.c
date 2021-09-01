@@ -24,7 +24,7 @@ static struct atc_mi_ha *ha_amh(struct mgos_homeassistant_object *o,
 }
 
 static void ha_amh_status(struct mgos_homeassistant_object *o,
-                           struct json_out *out) {
+                          struct json_out *out) {
   struct atc_mi_ha *amh = ha_amh(o, out);
   if (!amh) return;
   bool flags = cfg->status.flags && amh->amd.flags != ATC_MI_DATA_FLAGS_INVAL;
@@ -62,14 +62,14 @@ static struct mgos_homeassistant_object *ha_obj_add(
       ha, name, COMPONENT_SENSOR, NULL, ha_amh_status, amh);
   if (!o) FNERR_GT("failed to add HA object %s", name);
 
-#define HA_CLASS(o, name, class, unit)                                  \
-  do {                                                                  \
-    if (cfg->status.class &&                                            \
-        !mgos_homeassistant_object_class_add(                           \
-            o, #class,                                                  \
-            sizeof(unit) == 1 ? NULL : "\"unit_of_meas\":\"" unit "\"", \
-            ha_amh_##class))                                            \
-      FNERR_GT("failed to add %s class to HA object %s", #class, name); \
+#define HA_CLASS(o, name, class, unit)                                    \
+  do {                                                                    \
+    if (cfg->status.class &&                                              \
+        !mgos_homeassistant_object_class_add(                             \
+            o, #class,                                                    \
+            "\"unit_of_meas\":\"" unit "\",\"stat_cla\":\"measurement\"", \
+            ha_amh_##class))                                              \
+      FNERR_GT("failed to add %s class to HA object %s", #class, name);   \
   } while (0)
   HA_CLASS(o, name, battery, "%");
   HA_CLASS(o, name, voltage, "mV");
