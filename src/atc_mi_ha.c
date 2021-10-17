@@ -132,12 +132,17 @@ static void amh_timer(void *opaque) {
 
 static void am_sink(int ev, void *ev_data, void *userdata) {
   if (ev != ATC_MI_EVENT_DATA) return;
+
   struct atc_mi_event_data *amed = ev_data;
   const struct atc_mi_data *amd = amed->data;
   struct mgos_homeassistant_object *o =
       ha_obj_get_or_add(userdata, amd->mac, amed->atc_mi);
   if (!o) return;
+
   struct atc_mi_ha *amh = o->user_data;
+  if (amh->rts && amh->amd.cnt == amd->cnt &&  // Have fresh data, same counter?
+      memcmp(amed->res->addr.addr, amd->mac, sizeof(amd->mac)))  // Relayed?
+    return;
 
 #define HA_SINK_STAT(inval, attr, class)                                    \
   do {                                                                      \
