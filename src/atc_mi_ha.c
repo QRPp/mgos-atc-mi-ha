@@ -86,8 +86,8 @@ err:
   return NULL;
 }
 
-static char *ha_obj_get_name(char *buf, size_t bufL, uint8_t mac[6],
-                             struct atc_mi *am) {
+static char *ha_obj_get_name(char *buf, size_t bufL, const uint8_t mac[6],
+                             const struct atc_mi *am) {
   if (cfg->names.use_listed && am && am->name) {
     if (!cfg->names.prefix_listed) return am->name;
     snprintf(buf, bufL, "%s%s", cfg->names.prefix, am->name);
@@ -102,7 +102,7 @@ static char *ha_obj_get_name(char *buf, size_t bufL, uint8_t mac[6],
 }
 
 static struct mgos_homeassistant_object *ha_obj_get_or_add(
-    struct mgos_homeassistant *ha, uint8_t mac[6], struct atc_mi *am) {
+    struct mgos_homeassistant *ha, const uint8_t mac[6], struct atc_mi *am) {
   if (!am) {
     char *name = ha_obj_get_name(alloca(32), 32, mac, NULL);
     struct mgos_homeassistant_object *o =
@@ -130,9 +130,12 @@ static void amh_timer(void *opaque) {
   }
 }
 
-static void am_sink(uint8_t mac[6], struct atc_mi *am, const char *fmt,
-                    struct atc_mi_data *amd, void *ha) {
-  struct mgos_homeassistant_object *o = ha_obj_get_or_add(ha, mac, am);
+static void am_sink(int ev, void *ev_data, void *userdata) {
+  if (ev != ATC_MI_EVENT_DATA) return;
+  struct atc_mi_event_data *amed = ev_data;
+  const struct atc_mi_data *amd = amed->data;
+  struct mgos_homeassistant_object *o =
+      ha_obj_get_or_add(userdata, amd->mac, amed->atc_mi);
   if (!o) return;
   struct atc_mi_ha *amh = o->user_data;
 
@@ -156,6 +159,8 @@ static void am_sink(uint8_t mac[6], struct atc_mi *am, const char *fmt,
 
 bool mgos_atc_mi_ha_init(void) {
   cfg = mgos_config_get_atc_mi_ha(&mgos_sys_config);
-  if (cfg->enable) atc_mi_set_sink(am_sink, mgos_homeassistant_get_global());
+  if (cfg->enable)
+    TRY_OR(, mgos_event_add_handler, ATC_MI_EVENT_DATA, am_sink,
+           mgos_homeassistant_get_global());
   return true;
 }
