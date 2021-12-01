@@ -9,6 +9,7 @@
 
 struct atc_mi_ha {
   struct atc_mi_data amd;
+  int rssi;
   bool rts : 1;
   bool stalled : 1;
 };
@@ -27,10 +28,10 @@ static void ha_amh_status(struct mgos_homeassistant_object *o,
                           struct json_out *out) {
   struct atc_mi_ha *amh = ha_amh(o, out);
   if (!amh) return;
-  bool flags = cfg->status.flags && amh->amd.flags != ATC_MI_DATA_FLAGS_INVAL;
-  if (flags) json_printf(out, "%Q:%u", "flags", amh->amd.flags);
-  if (cfg->status.counter)
-    json_printf(out, "%s%Q:%u", flags ? "," : "", "counter", amh->amd.cnt);
+  json_printf(out, "rssi:%d", amh->rssi);
+  if (cfg->status.flags && amh->amd.flags != ATC_MI_DATA_FLAGS_INVAL)
+    json_printf(out, ",%Q:%u", "flags", amh->amd.flags);
+  if (cfg->status.counter) json_printf(out, ",%Q:%u", "counter", amh->amd.cnt);
 }
 
 #define HA_AMH_STAT(class, fmt, inval, attr, extra)                \
@@ -143,6 +144,7 @@ static void am_sink(int ev, void *ev_data, void *userdata) {
   if (amh->rts && amh->amd.cnt == amd->cnt &&  // Have fresh data, same counter?
       memcmp(amed->res->addr.addr, amd->mac, sizeof(amd->mac)))  // Relayed?
     return;
+  amh->rssi = amed->res->rssi;
 
 #define HA_SINK_STAT(inval, attr, class)                                    \
   do {                                                                      \
