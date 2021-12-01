@@ -9,8 +9,8 @@
 
 struct atc_mi_ha {
   struct atc_mi_data amd;
-  bool rts;
-  bool stalled;
+  bool rts : 1;
+  bool stalled : 1;
 };
 
 static const struct mgos_config_atc_mi_ha *cfg = NULL;
