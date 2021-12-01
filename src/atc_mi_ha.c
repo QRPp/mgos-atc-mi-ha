@@ -126,6 +126,7 @@ static void amh_timer(void *opaque) {
     amh->stalled = true;
   else {
     mgos_homeassistant_object_send_status(o);
+    amh->amd.flags = ATC_MI_DATA_FLAGS_INVAL;
     amh->rts = false;
     amh->stalled = mgos_set_timer(cfg->min_period * 1000, 0, amh_timer, o) ==
                    MGOS_INVALID_TIMER_ID;
@@ -156,7 +157,12 @@ static void am_sink(int ev, void *ev_data, void *userdata) {
   HA_SINK_STAT(ATC_MI_DATA_HUMI_CPCT_INVAL, humi_cPct, humidity);
   HA_SINK_STAT(ATC_MI_DATA_TEMP_CC_INVAL, temp_cC, temperature);
 #undef HA_SINK_STAT
-  if (amd->flags != ATC_MI_DATA_FLAGS_INVAL) amh->amd.flags = amd->flags;
+  if (amd->flags != ATC_MI_DATA_FLAGS_INVAL) {
+    if (amh->amd.flags == ATC_MI_DATA_FLAGS_INVAL)
+      amh->amd.flags = amd->flags;
+    else
+      amh->amd.flags |= amd->flags;
+  }
   amh->amd.cnt = amd->cnt;
 
   amh->rts = true;
