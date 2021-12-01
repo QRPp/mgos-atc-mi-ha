@@ -51,14 +51,13 @@ HA_AMH_STAT(temperature, "%.2f", ATC_MI_DATA_TEMP_CC_INVAL, temp_cC, / 100.0)
 
 static struct mgos_homeassistant_object *ha_obj_add(
     struct mgos_homeassistant *ha, char *name) {
-  struct atc_mi_ha *amh = malloc(sizeof(*amh));
-  if (!amh) FNERR_GT(MALLOC_ERR_FMT, MALLOC_ERR_ARG(amh));
+  struct atc_mi_ha *amh = NULL;
+  amh = TRY_CALLOC_OR(goto err, amh);
   amh->amd.batt_mV = ATC_MI_DATA_BATT_MV_INVAL;
   amh->amd.batt_pct = ATC_MI_DATA_BATT_PCT_INVAL;
   amh->amd.flags = ATC_MI_DATA_FLAGS_INVAL;
   amh->amd.humi_cPct = ATC_MI_DATA_HUMI_CPCT_INVAL;
   amh->amd.temp_cC = ATC_MI_DATA_TEMP_CC_INVAL;
-  amh->rts = false;
   amh->stalled = true;
 
   struct mgos_homeassistant_object *o = mgos_homeassistant_object_add(
