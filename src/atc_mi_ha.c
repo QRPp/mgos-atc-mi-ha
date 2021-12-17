@@ -119,6 +119,11 @@ static struct mgos_homeassistant_object *ha_obj_get_or_add(
   return am->user_data == am ? NULL : am->user_data;
 }
 
+static bool amh_obj_fromjson(struct mgos_homeassistant *ha,
+                             struct json_token v) {
+  return atc_mi_add_json(v);
+}
+
 static void amh_timer(void *opaque) {
   struct mgos_homeassistant_object *o = opaque;
   struct atc_mi_ha *amh = o->user_data;
@@ -173,8 +178,10 @@ static void am_sink(int ev, void *ev_data, void *userdata) {
 
 bool mgos_atc_mi_ha_init(void) {
   cfg = mgos_config_get_atc_mi_ha(&mgos_sys_config);
-  if (cfg->enable)
-    TRY_OR(, mgos_event_add_handler, ATC_MI_EVENT_DATA, am_sink,
+  if (!cfg->enable) return true;
+  TRY_RETF(mgos_homeassistant_register_provider, "atc_mi", amh_obj_fromjson,
+           NULL);
+  TRY_RETF(mgos_event_add_handler, ATC_MI_EVENT_DATA, am_sink,
            mgos_homeassistant_get_global());
   return true;
 }
