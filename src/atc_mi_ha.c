@@ -90,8 +90,7 @@ err:
 
 static char *ha_obj_get_name(char *buf, size_t bufL, const uint8_t mac[6],
                              const struct atc_mi *am) {
-  if (cfg->names.use_listed && am && am->name) {
-    if (!cfg->names.prefix_listed) return am->name;
+  if (am && am->name) {
     snprintf(buf, bufL, "%s%s", cfg->names.prefix, am->name);
     return buf;
   }
@@ -105,23 +104,21 @@ static char *ha_obj_get_name(char *buf, size_t bufL, const uint8_t mac[6],
 
 static struct mgos_homeassistant_object *ha_obj_get_or_add(
     struct mgos_homeassistant *ha, const uint8_t mac[6], struct atc_mi *am) {
-  if (!am) {
-    char *name = ha_obj_get_name(alloca(32), 32, mac, NULL);
-    struct mgos_homeassistant_object *o =
-        mgos_homeassistant_object_get(ha, name);
-    return !o ? ha_obj_add(ha, name) : strcmp(o->object_name, name) ? NULL : o;
-  }
-
-  if (!am->user_data) {
-    am->user_data = ha_obj_add(ha, ha_obj_get_name(alloca(32), 32, mac, am));
-    if (!am->user_data) am->user_data = am;
-  }
-  return am->user_data == am ? NULL : am->user_data;
+  if (am) return am->user_data;
+  char *name = ha_obj_get_name(alloca(32), 32, mac, NULL);
+  struct mgos_homeassistant_object *o = mgos_homeassistant_object_get(ha, name);
+  return !o ? ha_obj_add(ha, name) : strcmp(o->object_name, name) ? NULL : o;
 }
 
 static bool amh_obj_fromjson(struct mgos_homeassistant *ha,
                              struct json_token v) {
-  return atc_mi_add_json(v);
+  struct atc_mi *am = atc_mi_load_json(v);
+  if (!am) return false;
+  am->user_data = ha_obj_add(ha, ha_obj_get_name(alloca(32), 32, am->mac, am));
+  if (am->user_data && atc_mi_add(am)) return true;
+  if (am->user_data) mgos_homeassistant_object_remove((void *) &am->user_data);
+  atc_mi_free(am);
+  return false;
 }
 
 static void amh_timer(void *opaque) {
