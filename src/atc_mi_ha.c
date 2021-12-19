@@ -2,14 +2,19 @@
 #include <mgos_homeassistant.h>
 #include <mgos_timers.h>
 
+#include <mgos-helpers/json.h>
 #include <mgos-helpers/log.h>
 #include <mgos-helpers/mem.h>
+#include <mgos-helpers/time.h>
 
 #include <atc_mi.h>
 
 struct atc_mi_ha {
   struct atc_mi_data amd;
   int rssi;
+  int64_t mtn_last_since;
+  bool mtn_last : 1;
+  bool mtn_status : 1;
   bool relayed : 1;
   bool rts : 1;
   bool stalled : 1;
@@ -49,8 +54,34 @@ HA_AMH_STAT(humidity, "%.2f", ATC_MI_DATA_HUMI_CPCT_INVAL, humi_cPct, / 100.0)
 HA_AMH_STAT(temperature, "%.2f", ATC_MI_DATA_TEMP_CC_INVAL, temp_cC, / 100.0)
 #undef HA_AMH_STAT
 
+static void ha_amh_motion(struct mgos_homeassistant_object *o,
+                          struct json_out *out) {
+  struct atc_mi_ha *amh = ha_amh(o, out);
+  if (!amh) return;
+  bool mtn_now =
+      amh->amd.flags != ATC_MI_DATA_FLAGS_INVAL && amh->amd.flags & 1;
+  if (mtn_now != amh->mtn_last) {
+    amh->mtn_last = mtn_now;
+    amh->mtn_last_since = mgos_uptime_micros();
+  }
+  if (mtn_now != amh->mtn_status &&
+      MGOS_OLDER_THAN_S(amh->mtn_last_since,
+                        mtn_now ? cfg->motion.on_delay : cfg->motion.off_delay))
+    amh->mtn_status = mtn_now;
+  json_printf(out, "%Q,%Q:{%Q:%Q", ON_OFF(amh->mtn_status), "mtn", "last",
+              ON_OFF(amh->mtn_last));
+  if (mtn_now != amh->mtn_status)
+    json_printf(out, ",%Q:%u", "last_for",
+                (unsigned) (MGOS_US_SINCE(amh->mtn_last_since) / 1000000));
+  json_printf(out, "}");
+}
+
+struct hoa_opt {
+  bool motion;
+};
+
 static struct mgos_homeassistant_object *ha_obj_add(
-    struct mgos_homeassistant *ha, char *name) {
+    struct mgos_homeassistant *ha, char *name, struct hoa_opt *opt) {
   struct atc_mi_ha *amh = NULL;
   amh = TRY_CALLOC_OR(goto err, amh);
   amh->amd.batt_mV = ATC_MI_DATA_BATT_MV_INVAL;
@@ -59,7 +90,6 @@ static struct mgos_homeassistant_object *ha_obj_add(
   amh->amd.humi_cPct = ATC_MI_DATA_HUMI_CPCT_INVAL;
   amh->amd.temp_cC = ATC_MI_DATA_TEMP_CC_INVAL;
   amh->stalled = true;
-
   struct mgos_homeassistant_object *o = mgos_homeassistant_object_add(
       ha, name, COMPONENT_SENSOR, NULL, ha_amh_status, amh);
   if (!o) FNERR_GT("failed to add HA object %s", name);
@@ -78,6 +108,17 @@ static struct mgos_homeassistant_object *ha_obj_add(
   HA_CLASS(o, name, humidity, "%");
   HA_CLASS(o, name, temperature, "°C");
 #undef HA_CLASS
+
+  if (opt && opt->motion) {
+    struct mgos_homeassistant_object_class *c =
+        mgos_homeassistant_object_class_add(
+            o, "motion",
+            "\"json_attr_t\":\"~\","
+            "\"json_attr_tpl\":\"{{value_json.mtn|tojson}}\"",
+            ha_amh_motion);
+    if (!c) FNERR_GT("failed to add %s class to HA object %s", "motion", name);
+    c->component = COMPONENT_BINARY_SENSOR;
+  }
 
   FNLOG(LL_INFO, "added HA object %s", name);
   return o;
@@ -107,15 +148,20 @@ static struct mgos_homeassistant_object *ha_obj_get_or_add(
   if (am) return am->user_data;
   char *name = ha_obj_get_name(alloca(32), 32, mac, NULL);
   struct mgos_homeassistant_object *o = mgos_homeassistant_object_get(ha, name);
-  return !o ? ha_obj_add(ha, name) : strcmp(o->object_name, name) ? NULL : o;
+  if (o) return strcmp(o->object_name, name) ? NULL : o;
+  return ha_obj_add(ha, name, NULL);
 }
 
 static bool amh_obj_fromjson(struct mgos_homeassistant *ha,
                              struct json_token v) {
   struct atc_mi *am = atc_mi_load_json(v);
   if (!am) return false;
-  am->user_data = ha_obj_add(ha, ha_obj_get_name(alloca(32), 32, am->mac, am));
+  struct hoa_opt opt = {motion : false};
+  TRY_JSON_SCANF_OR(goto err, v.ptr, v.len, "{motion:%B}", &opt.motion);
+  am->user_data =
+      ha_obj_add(ha, ha_obj_get_name(alloca(32), 32, am->mac, am), &opt);
   if (am->user_data && atc_mi_add(am)) return true;
+err:
   if (am->user_data) mgos_homeassistant_object_remove((void *) &am->user_data);
   atc_mi_free(am);
   return false;
