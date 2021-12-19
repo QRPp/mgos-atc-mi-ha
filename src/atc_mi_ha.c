@@ -35,7 +35,7 @@ static void ha_amh_status(struct mgos_homeassistant_object *o,
   struct atc_mi_ha *amh = ha_amh(o, out);
   if (!amh) return;
   json_printf(out, "rssi:%d", amh->rssi);
-  if (amh->relayed) json_printf(out, ",%Q:%Q", "relayed", "yes");
+  if (amh->relayed) json_printf(out, ",%Q:%Q", "relayed", "ON");
   if (cfg->status.flags && amh->amd.flags != ATC_MI_DATA_FLAGS_INVAL)
     json_printf(out, ",%Q:%u", "flags", amh->amd.flags);
   if (cfg->status.counter) json_printf(out, ",%Q:%u", "counter", amh->amd.cnt);
