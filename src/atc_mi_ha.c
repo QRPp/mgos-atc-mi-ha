@@ -1,3 +1,5 @@
+#include <limits.h>
+
 #include <mgos.h>
 #include <mgos_homeassistant.h>
 #include <mgos_timers.h>
@@ -34,24 +36,26 @@ static void ha_amh_status(struct mgos_homeassistant_object *o,
                           struct json_out *out) {
   struct atc_mi_ha *amh = ha_amh(o, out);
   if (!amh) return;
-  json_printf(out, "rssi:%d", amh->rssi);
+  if (amh->rssi != INT_MIN) json_printf(out, ",rssi:%d", amh->rssi);
   if (amh->relayed) json_printf(out, ",%Q:%Q", "relayed", "ON");
   if (cfg->status.flags && amh->amd.flags != ATC_MI_DATA_FLAGS_INVAL)
     json_printf(out, ",%Q:%u", "flags", amh->amd.flags);
   if (cfg->status.counter) json_printf(out, ",%Q:%u", "counter", amh->amd.cnt);
 }
 
-#define HA_AMH_STAT(class, fmt, inval, attr, extra)                \
+#define HA_AMH_STAT(class, fmt, inval, attr, conv, extra)          \
   static void ha_amh_##class(struct mgos_homeassistant_object * o, \
                              struct json_out * out) {              \
     struct atc_mi_ha *amh = ha_amh(o, out);                        \
     if (amh && amh->amd.attr != inval)                             \
-      json_printf(out, fmt, amh->amd.attr extra);                  \
+      json_printf(out, fmt, amh->amd.attr conv);                   \
+    extra;                                                         \
   }
-HA_AMH_STAT(battery, "%u", ATC_MI_DATA_BATT_PCT_INVAL, batt_pct, )
-HA_AMH_STAT(voltage, "%u", ATC_MI_DATA_BATT_MV_INVAL, batt_mV, )
-HA_AMH_STAT(humidity, "%.2f", ATC_MI_DATA_HUMI_CPCT_INVAL, humi_cPct, / 100.0)
-HA_AMH_STAT(temperature, "%.2f", ATC_MI_DATA_TEMP_CC_INVAL, temp_cC, / 100.0)
+HA_AMH_STAT(battery, "%u", ATC_MI_DATA_BATT_PCT_INVAL, batt_pct, , )
+HA_AMH_STAT(humidity, "%.2f", ATC_MI_DATA_HUMI_CPCT_INVAL, humi_cPct, / 100.0,
+            ha_amh_status(o, out))
+HA_AMH_STAT(temperature, "%.2f", ATC_MI_DATA_TEMP_CC_INVAL, temp_cC, / 100.0, )
+HA_AMH_STAT(voltage, "%u", ATC_MI_DATA_BATT_MV_INVAL, batt_mV, , )
 #undef HA_AMH_STAT
 
 static void ha_amh_motion(struct mgos_homeassistant_object *o,
@@ -89,25 +93,30 @@ static struct mgos_homeassistant_object *ha_obj_add(
   amh->amd.flags = ATC_MI_DATA_FLAGS_INVAL;
   amh->amd.humi_cPct = ATC_MI_DATA_HUMI_CPCT_INVAL;
   amh->amd.temp_cC = ATC_MI_DATA_TEMP_CC_INVAL;
+  amh->rssi = INT_MIN;
   amh->stalled = true;
   struct mgos_homeassistant_object *o = mgos_homeassistant_object_add(
-      ha, name, COMPONENT_SENSOR, NULL, ha_amh_status, amh);
+      ha, name, COMPONENT_SENSOR, NULL, NULL, amh);
   if (!o) FNERR_GT("failed to add HA object %s", name);
 
-#define HA_CLASS(o, name, class, unit)                                    \
+#define HA_CLASS_COND(cond, class, unit)                                  \
   do {                                                                    \
-    if (cfg->status.class &&                                              \
+    if (cond &&                                                           \
         !mgos_homeassistant_object_class_add(                             \
             o, #class,                                                    \
             "\"unit_of_meas\":\"" unit "\",\"stat_cla\":\"measurement\"", \
             ha_amh_##class))                                              \
       FNERR_GT("failed to add %s class to HA object %s", #class, name);   \
   } while (0)
-  HA_CLASS(o, name, battery, "%");
-  HA_CLASS(o, name, voltage, "mV");
-  HA_CLASS(o, name, humidity, "%");
-  HA_CLASS(o, name, temperature, "°C");
+#define HA_CLASS(...) HA_CLASS_COND(true, __VA_ARGS__)
+#define HA_CLASS_CFG(c, ...) HA_CLASS_COND(cfg->status.c, c, __VA_ARGS__)
+  HA_CLASS(humidity, "%");
+  HA_CLASS(temperature, "°C");
+  HA_CLASS_CFG(battery, "%");
+  HA_CLASS_CFG(voltage, "mV");
 #undef HA_CLASS
+#undef HA_CLASS_CFG
+#undef HA_CLASS_COND
 
   if (opt && opt->motion) {
     struct mgos_homeassistant_object_class *c =
@@ -196,12 +205,17 @@ static void am_sink(int ev, void *ev_data, void *userdata) {
   amh->relayed = relayed;
   amh->rssi = amed->res->rssi;
 
-#define HA_SINK_STAT(inval, attr, class)                                    \
-  do {                                                                      \
-    if (cfg->status.class && amd->attr != inval) amh->amd.attr = amd->attr; \
+#define HA_SINK_STAT_COND(inval, attr, class, cond)            \
+  do {                                                         \
+    if (cond && amd->attr != inval) amh->amd.attr = amd->attr; \
   } while (0)
+#define HA_SINK_STAT(inval, attr, class) \
+  HA_SINK_STAT_COND(inval, attr, class, cfg->status.class)
   HA_SINK_STAT(ATC_MI_DATA_BATT_MV_INVAL, batt_mV, voltage);
   HA_SINK_STAT(ATC_MI_DATA_BATT_PCT_INVAL, batt_pct, battery);
+#undef HA_SINK_STAT
+#define HA_SINK_STAT(inval, attr, class) \
+  HA_SINK_STAT_COND(inval, attr, class, true)
   HA_SINK_STAT(ATC_MI_DATA_HUMI_CPCT_INVAL, humi_cPct, humidity);
   HA_SINK_STAT(ATC_MI_DATA_TEMP_CC_INVAL, temp_cC, temperature);
 #undef HA_SINK_STAT

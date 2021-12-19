@@ -23,8 +23,6 @@ config_schema:
   - ["atc_mi.ha.status.voltage", "b", false, {"title": "Include battery voltage"}]
   - ["atc_mi.ha.status.counter", "b", false, {"title": "Include measurement counter"}]
   - ["atc_mi.ha.status.flags", "b", false, {"title": "Include ATC/pvvx flags"}]
-  - ["atc_mi.ha.status.humidity", "b", true, {"title": "Include humidity"}]
-  - ["atc_mi.ha.status.temperature", "b", true, {"title": "Include temperature"}]
 
 libs:
   - origin: https://github.com/mongoose-os-libs/homeassistant
