@@ -24,17 +24,21 @@ struct atc_mi_ha {
 
 static const struct mgos_config_atc_mi_ha *cfg = NULL;
 
-static struct atc_mi_ha *ha_amh(struct mgos_homeassistant_object *o,
-                                struct json_out *out) {
+static struct atc_mi_ha *ha_amh(struct mgos_homeassistant_object *o) {
   if (!o) FNERR_RET(NULL, "NULL %s", "o");
   if (!o->user_data) FNERR_RET(NULL, "NULL %s", "o->user_data");
-  if (!out) FNERR_RET(NULL, "NULL %s", "out");
   return o->user_data;
+}
+
+static struct atc_mi_ha *ha_amh_out(struct mgos_homeassistant_object *o,
+                                    struct json_out *out) {
+  if (!out) FNERR_RET(NULL, "NULL %s", "out");
+  return ha_amh(o);
 }
 
 static void ha_amh_status(struct mgos_homeassistant_object *o,
                           struct json_out *out) {
-  struct atc_mi_ha *amh = ha_amh(o, out);
+  struct atc_mi_ha *amh = ha_amh_out(o, out);
   if (!amh) return;
   if (amh->rssi != INT_MIN) json_printf(out, ",rssi:%d", amh->rssi);
   if (amh->relayed) json_printf(out, ",%Q:%Q", "relayed", "ON");
@@ -46,7 +50,7 @@ static void ha_amh_status(struct mgos_homeassistant_object *o,
 #define HA_AMH_STAT(class, fmt, inval, attr, conv, extra)          \
   static void ha_amh_##class(struct mgos_homeassistant_object * o, \
                              struct json_out * out) {              \
-    struct atc_mi_ha *amh = ha_amh(o, out);                        \
+    struct atc_mi_ha *amh = ha_amh_out(o, out);                    \
     if (amh && amh->amd.attr != inval)                             \
       json_printf(out, fmt, amh->amd.attr conv);                   \
     extra;                                                         \
@@ -60,7 +64,7 @@ HA_AMH_STAT(voltage, "%u", ATC_MI_DATA_BATT_MV_INVAL, batt_mV, , )
 
 static void ha_amh_motion(struct mgos_homeassistant_object *o,
                           struct json_out *out) {
-  struct atc_mi_ha *amh = ha_amh(o, out);
+  struct atc_mi_ha *amh = ha_amh_out(o, out);
   if (!amh) return;
   bool mtn_now =
       amh->amd.flags != ATC_MI_DATA_FLAGS_INVAL && amh->amd.flags & 1;
@@ -78,6 +82,31 @@ static void ha_amh_motion(struct mgos_homeassistant_object *o,
     json_printf(out, ",%Q:%u", "last_for",
                 (unsigned) (MGOS_US_SINCE(amh->mtn_last_since) / 1000000));
   json_printf(out, "}");
+}
+
+#define MOTION_CMD_FMT "{state:%Q}"
+static void ha_amh_motion_cmd(struct mgos_homeassistant_object *o,
+                              const char *arg, const int arg_sz) {
+  struct atc_mi_ha *amh = ha_amh(o);
+  if (!amh) return;
+  char *state = NULL;
+  if (json_scanf(arg, arg_sz, MOTION_CMD_FMT, &state) != 1 || !state)
+    FNERR_RET(, "%s is required, got %.*s", "state", arg_sz, arg);
+  if (!strcasecmp(state, "off"))
+    amh->mtn_status = false;
+  else if (!strcasecmp(state, "on"))
+    amh->mtn_status = true;
+  else if (!strcasecmp(state, "toggle"))
+    amh->mtn_status = !amh->mtn_status;
+  else
+    FNERR_GT("on/off/toggle expected, got %s", state);
+
+  amh->mtn_last = amh->mtn_status;
+  amh->mtn_last_since = mgos_uptime_micros();
+  mgos_homeassistant_object_send_status(o);
+
+err:
+  if (state) free(state);
 }
 
 struct hoa_opt {
@@ -127,6 +156,8 @@ static struct mgos_homeassistant_object *ha_obj_add(
             ha_amh_motion);
     if (!c) FNERR_GT("failed to add %s class to HA object %s", "motion", name);
     c->component = COMPONENT_BINARY_SENSOR;
+    TRY_GT(mgos_homeassistant_object_add_cmd_cb, o, "motion",
+           ha_amh_motion_cmd);
   }
 
   FNLOG(LL_INFO, "added HA object %s", name);
